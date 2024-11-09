@@ -7,7 +7,7 @@ const path = require("path");
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "../frontend/src/assets/products"); // Specify where to store the images
+        cb(null, "../kape-main/src/assets/products"); // Specify where to store the images
     },
     filename: (req, file, cb) => {
         // Make sure the filename is unique by appending the timestamp
@@ -129,8 +129,7 @@ router.post("/add/category", jwtAuthorize, async (req, res) => {
 
 router.put("/update/product/:product_id", jwtAuthorize, async (req, res) => {
     const { product_id } = req.params;
-    const { product_name, product_price, category_id, product_image } =
-        req.body;
+    const { product_name, product_price, category_id } = req.body;
     try {
         // Check if the product exists
         const checkQuery = `SELECT * FROM products WHERE product_id = $1`;
@@ -140,11 +139,12 @@ router.put("/update/product/:product_id", jwtAuthorize, async (req, res) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
+        console.log(req.body);
         // Update query for the product
         const query = `
             UPDATE products
-            SET product_name = $1, product_price = $2, category_id = $3, product_image = $4
-            WHERE product_id = $5
+            SET product_name = $1, product_price = $2, category_id = $3,
+            WHERE product_id = $4
             RETURNING *;
         `;
 
@@ -153,7 +153,6 @@ router.put("/update/product/:product_id", jwtAuthorize, async (req, res) => {
             product_name,
             product_price,
             category_id,
-            product_image,
             product_id,
         ]);
 
