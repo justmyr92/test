@@ -177,7 +177,7 @@ router.get("/get/top-sold-products-no-limit/:year", async (req, res) => {
 router.get("/get/order-list/:order_id", jwtAuthorize, async (req, res) => {
     try {
         const order_id = req.params.order_id;
-        const query = `SELECT * FROM order_list inner join products on products.product_id = order_list.product_id WHERE order_id = $1;`;
+        const query = `SELECT * FROM order_list inner join products on products.product_id = order_list.product_id WHERE order_id = $1 LIMIT 10;`;
         const result = await pool.query(query, [order_id]);
         return res.json(result.rows);
     } catch (error) {

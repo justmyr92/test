@@ -30,8 +30,8 @@ router.get("/get/products", jwtAuthorize, async (req, res) => {
 
 router.get("/get/products-by-type/:type", async (req, res) => {
     try {
-        const type = req.params.type;
-        const query = `SELECT * FROM products INNER JOIN categories on categories.category_id = products.category_id where product_type = $1`;
+        const { type } = req.params;
+        const query = `SELECT * FROM products INNER JOIN categories on categories.category_id = products.category_id where products.product_type = $1`;
         const productswithcategories = await pool.query(query, [type]);
         return res.json(productswithcategories.rows);
     } catch (error) {
@@ -127,43 +127,134 @@ router.post("/add/category", jwtAuthorize, async (req, res) => {
     }
 });
 
-router.put("/update/product/:product_id", jwtAuthorize, async (req, res) => {
-    const { product_id } = req.params;
-    const { product_name, product_price, category_id } = req.body;
-    try {
-        // Check if the product exists
-        const checkQuery = `SELECT * FROM products WHERE product_id = $1`;
-        const checkProduct = await pool.query(checkQuery, [product_id]);
+router.patch(
+    "/update/category/:category_id",
+    jwtAuthorize,
+    async (req, res) => {
+        try {
+            const { category_id } = req.params;
+            const { category_name } = req.body;
 
-        if (checkProduct.rowCount === 0) {
-            return res.status(404).json({ message: "Product not found" });
+            // Validate input (optional but recommended)
+            if (!category_name) {
+                return res
+                    .status(400)
+                    .json({ message: "Category name is required" });
+            }
+
+            // Update the category in the database
+            const query = `
+            UPDATE categories 
+            SET category_name = $1 
+            WHERE category_id = $2 
+            RETURNING *`;
+
+            const updatedCategory = await pool.query(query, [
+                category_name,
+                category_id,
+            ]);
+
+            // Check if category exists
+            if (updatedCategory.rows.length === 0) {
+                return res.status(404).json({ message: "Category not found" });
+            }
+
+            return res.json(updatedCategory.rows[0]);
+        } catch (error) {
+            console.error("Error updating category:", error);
+            res.status(500).json({ message: "Error updating category" });
         }
-
-        console.log(req.body);
-        // Update query for the product
-        const query = `
-            UPDATE products
-            SET product_name = $1, product_price = $2, category_id = $3,
-            WHERE product_id = $4
-            RETURNING *;
-        `;
-
-        // Execute the update query
-        const updatedProduct = await pool.query(query, [
-            product_name,
-            product_price,
-            category_id,
-            product_id,
-        ]);
-
-        return res.json({
-            message: "Product updated successfully",
-            product: updatedProduct.rows[0],
-        });
-    } catch (error) {
-        console.error("Error updating product:", error);
-        res.status(500).json({ message: "Error updating product" });
     }
-});
+);
+
+router.patch(
+    "/update/delete/category/:category_id",
+    jwtAuthorize,
+    async (req, res) => {
+        try {
+            const { category_id } = req.params;
+            const { status } = req.body;
+
+            // Validate input (optional but recommended)
+            if (!category_id) {
+                return res
+                    .status(400)
+                    .json({ message: "Category ID is required" });
+            }
+
+            // Update the category in the database
+            const query = `
+            UPDATE categories 
+            SET status = $1 
+            WHERE category_id = $2 
+            RETURNING *`;
+
+            const updatedCategory = await pool.query(query, [
+                status,
+                category_id,
+            ]);
+
+            // Check if category exists
+            if (updatedCategory.rows.length === 0) {
+                return res.status(404).json({ message: "Category not found" });
+            }
+
+            return res.json(updatedCategory.rows[0]);
+        } catch (error) {
+            console.error("Error updating category:", error);
+            res.status(500).json({ message: "Error updating category" });
+        }
+    }
+);
+
+router.put(
+    "/update/product/:product_id",
+    jwtAuthorize,
+    upload.single("product_image"), // Handle single file upload
+    async (req, res) => {
+        const { product_id } = req.params;
+        const { product_name, product_price, category_id } = req.body;
+        const product_image = req.file?.filename; // File will be undefined if no new image is uploaded
+
+        try {
+            // Check if the product exists
+            const checkQuery = `SELECT * FROM products WHERE product_id = $1`;
+            const checkProduct = await pool.query(checkQuery, [product_id]);
+
+            if (checkProduct.rowCount === 0) {
+                return res.status(404).json({ message: "Product not found" });
+            }
+
+            // Update query for the product
+            const query = `
+                UPDATE products
+                SET 
+                    product_name = $1, 
+                    product_price = $2, 
+                    category_id = $3, 
+                    product_image = COALESCE($4, product_image)
+                WHERE product_id = $5
+                RETURNING *;
+            `;
+
+            // Execute the update query
+            const updatedProduct = await pool.query(query, [
+                product_name,
+                product_price,
+                category_id,
+                "../kape-main/src/assets/products/" + product_image || null, // Pass null if no file is uploaded
+                product_id,
+            ]);
+
+            return res.json({
+                message: "Product updated successfully",
+                product: updatedProduct.rows[0],
+            });
+        } catch (error) {
+            console.error("Error updating product:", error);
+            res.status(500).json({ message: "Error updating product" });
+        }
+    }
+);
 
 module.exports = router;
