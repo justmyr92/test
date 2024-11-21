@@ -2,20 +2,15 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../database/coffeeshop.db");
 const jwtAuthorize = require("../middleware/jwt.validator");
+const cloudinary = require("../utils/cloudinary");
 const multer = require("multer");
-const path = require("path");
 
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "../kape-main/src/assets/promos"); // Specify where to store the images
-    },
-    filename: (req, file, cb) => {
-        // Make sure the filename is unique by appending the timestamp
-        cb(null, Date.now() + path.extname(file.originalname));
+    filename: function (req, file, cb) {
+        cb(null, file.originalname);
     },
 });
 
-// Create multer instance to handle single image upload
 const upload = multer({ storage: storage });
 
 // Route to upload a promotion
@@ -40,16 +35,29 @@ router.post(
 
         try {
             // Insert the promotion data into the database (adjust the table name and columns as needed)
-            const result = await pool.query(
-                "INSERT INTO promotions (promo_title, promo_description, promo_image) VALUES ($1, $2, $3) RETURNING *",
-                [promoTitle, promoDescription, promoImage]
-            );
+            cloudinary.uploader.upload(
+                req.file.path,
+                async function (err, result) {
+                    if (err) {
+                        console.log(err);
+                        return res.status(500).json({
+                            success: false,
+                            message: "Error",
+                        });
+                    } else {
+                        const results = await pool.query(
+                            "INSERT INTO promotions (promo_title, promo_description, promo_image) VALUES ($1, $2, $3) RETURNING *",
+                            [promoTitle, promoDescription, result.url]
+                        );
 
-            // Respond with the inserted data
-            res.status(201).json({
-                message: "Promotion uploaded successfully",
-                promotion: result.rows[0],
-            });
+                        // Respond with the inserted data
+                        res.status(201).json({
+                            message: "Promotion uploaded successfully",
+                            promotion: results.rows[0],
+                        });
+                    }
+                }
+            );
         } catch (err) {
             console.error(err);
             res.status(500).json({ error: "Failed to upload promotion" });
@@ -95,9 +103,18 @@ router.patch(
             if (promoCheck.rows.length === 0) {
                 return res.status(404).json({ error: "Promotion not found" });
             }
-
-            // Update the promotion data
-            const query = `
+            cloudinary.uploader.upload(
+                req.file.path,
+                async function (err, result) {
+                    if (err) {
+                        console.log(err);
+                        return res.status(500).json({
+                            success: false,
+                            message: "Error",
+                        });
+                    } else {
+                        // Update the promotion data
+                        const query = `
                 UPDATE promotions 
                 SET 
                     promo_title = $1, 
@@ -106,13 +123,21 @@ router.patch(
                 WHERE promo_id = $4 
                 RETURNING *`;
 
-            const values = [promoTitle, promoDescription, promoImage, id];
-            const result = await pool.query(query, values);
+                        const values = [
+                            promoTitle,
+                            promoDescription,
+                            result.url,
+                            id,
+                        ];
+                        const results = await pool.query(query, values);
 
-            res.status(200).json({
-                message: "Promotion updated successfully",
-                promotion: result.rows[0],
-            });
+                        res.status(200).json({
+                            message: "Promotion updated successfully",
+                            promotion: results.rows[0],
+                        });
+                    }
+                }
+            );
         } catch (err) {
             console.error(err);
             res.status(500).json({ error: "Failed to update promotion" });

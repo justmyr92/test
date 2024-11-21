@@ -4,18 +4,14 @@ const pool = require("../database/coffeeshop.db");
 const jwtAuthorize = require("../middleware/jwt.validator");
 const multer = require("multer");
 const path = require("path");
+const cloudinary = require("../utils/cloudinary");
 
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "../kape-main/src/assets/products"); // Specify where to store the images
-    },
-    filename: (req, file, cb) => {
-        // Make sure the filename is unique by appending the timestamp
-        cb(null, Date.now() + path.extname(file.originalname));
+    filename: function (req, file, cb) {
+        cb(null, file.originalname);
     },
 });
 
-// Create multer instance to handle single image upload
 const upload = multer({ storage: storage });
 
 router.get("/get/products", jwtAuthorize, async (req, res) => {
@@ -84,30 +80,36 @@ router.post(
         try {
             const { product_name, product_price, category_id } = req.body;
             const product_image = req.file ? req.file.path : null; // Get the image path from the uploaded file
-
-            console.log(
-                product_image,
-                product_name,
-                product_price,
-                category_id
-            );
-            // SQL query to insert product into the database
-            const query = `
+            console.log(category_id);
+            cloudinary.uploader.upload(
+                req.file.path,
+                async function (err, result) {
+                    if (err) {
+                        console.log(err);
+                        return res.status(500).json({
+                            success: false,
+                            message: "Error",
+                        });
+                    } else {
+                        // SQL query to insert product into the database
+                        const query = `
             INSERT INTO products (product_name, product_price, category_id, product_image)
             VALUES ($1, $2, $3, $4)
             RETURNING *;
         `;
 
-            // Execute the query to insert the product
-            const newProduct = await pool.query(query, [
-                product_name,
-                product_price,
-                category_id || 1, // Use category_id from the body, default to 1 if not provided
-                product_image, // Store the path to the uploaded image
-            ]);
+                        // Execute the query to insert the product
+                        const newProduct = await pool.query(query, [
+                            product_name,
+                            product_price,
+                            category_id, // Use category_id from the body, default to 1 if not provided
+                            result.url, // Store the path to the uploaded image
+                        ]);
 
-            // Respond with the newly added product
-            return res.json(newProduct.rows[0]);
+                        return res.json(newProduct.rows[0]);
+                    }
+                }
+            );
         } catch (error) {
             console.error("Error adding product:", error);
             res.status(500).json({ message: "Error adding product" });
@@ -226,7 +228,17 @@ router.put(
             }
 
             // Update query for the product
-            const query = `
+            cloudinary.uploader.upload(
+                req.file.path,
+                async function (err, result) {
+                    if (err) {
+                        console.log(err);
+                        return res.status(500).json({
+                            success: false,
+                            message: "Error",
+                        });
+                    } else {
+                        const query = `
                 UPDATE products
                 SET 
                     product_name = $1, 
@@ -237,19 +249,22 @@ router.put(
                 RETURNING *;
             `;
 
-            // Execute the update query
-            const updatedProduct = await pool.query(query, [
-                product_name,
-                product_price,
-                category_id,
-                "../kape-main/src/assets/products/" + product_image || null, // Pass null if no file is uploaded
-                product_id,
-            ]);
+                        // Execute the update query
+                        const updatedProduct = await pool.query(query, [
+                            product_name,
+                            product_price,
+                            category_id,
+                            result.url,
+                            product_id,
+                        ]);
 
-            return res.json({
-                message: "Product updated successfully",
-                product: updatedProduct.rows[0],
-            });
+                        return res.json({
+                            message: "Product updated successfully",
+                            product: updatedProduct.rows[0],
+                        });
+                    }
+                }
+            );
         } catch (error) {
             console.error("Error updating product:", error);
             res.status(500).json({ message: "Error updating product" });
